@@ -34,7 +34,8 @@ module RailsBackupMigrate
     # list the tables we should backup, excluding ones we can ignore
     def interesting_tables
       ActiveRecord::Base.connection.tables.sort.reject do |tbl|
-        %w(schema_migrations sessions public_exceptions).include?(tbl)
+        %w(schema_migrations sessions public_exceptions ar_internal_metadata 
+           ar_internal_metadata_pkey).include?(tbl)
       end
     end
     
@@ -137,18 +138,19 @@ module RailsBackupMigrate
       
     def restore_db_from_yml
       FileUtils.chdir temp_dir + '/db/backup'
-      
-      interesting_tables.each do |tbl|
-        ActiveRecord::Base.transaction do 
-          puts "Loading #{tbl}..." if VERBOSE
-          YAML.load_file("#{tbl}.yml").each do |fixture|
-            keys = fixture.keys.map { |key| ActiveRecord::Base.connection.quote_column_name(key) }
-            values = fixture.values.map { |value| ActiveRecord::Base.connection.quote(value) }
+      ActiveRecord::Base.connection.disable_referential_integrity do
+        interesting_tables.each do |tbl|
+          ActiveRecord::Base.transaction do 
+            puts "Loading #{tbl}..." if VERBOSE
+            YAML.load_file("#{tbl}.yml").each do |fixture|
+              keys = fixture.keys.map { |key| ActiveRecord::Base.connection.quote_column_name(key) }
+              values = fixture.values.map { |value| ActiveRecord::Base.connection.quote(value) }
 
-            ActiveRecord::Base.connection.execute(
-              "INSERT INTO #{tbl} (#{keys.join(',')}) VALUES (#{values.join(',')})", 
-              'Fixture Insert'
-            )
+              ActiveRecord::Base.connection.execute(
+                "INSERT INTO #{tbl} (#{keys.join(',')}) VALUES (#{values.join(',')})", 
+                'Fixture Insert'
+              )
+            end
           end
         end
       end
