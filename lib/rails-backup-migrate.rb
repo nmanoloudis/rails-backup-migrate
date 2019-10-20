@@ -139,13 +139,17 @@ module RailsBackupMigrate
       FileUtils.chdir temp_dir + '/db/backup'
       
       interesting_tables.each do |tbl|
-
         ActiveRecord::Base.transaction do 
-        
           puts "Loading #{tbl}..." if VERBOSE
           YAML.load_file("#{tbl}.yml").each do |fixture|
-            ActiveRecord::Base.connection.execute "INSERT INTO #{tbl} (#{fixture.keys.map{|k| "`#{k}`"}.join(",")}) VALUES (#{fixture.values.collect { |value| ActiveRecord::Base.connection.quote(value) }.join(",")})", 'Fixture Insert'
-          end        
+            keys = fixture.keys.map { |key| ActiveRecord::Base.connection.quote_column_name(key) }
+            values = fixture.values.map { |value| ActiveRecord::Base.connection.quote(value) }
+
+            ActiveRecord::Base.connection.execute(
+              "INSERT INTO #{tbl} (#{keys.join(',')}) VALUES (#{values.join(',')})", 
+              'Fixture Insert'
+            )
+          end
         end
       end
     end
